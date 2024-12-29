@@ -6,6 +6,9 @@ import seaborn as sns
 import pandas as pd
 import heapq
 
+from modules.graph import *
+from modules.utils import *
+
 
 def create_flight_network(working_df):
     """
@@ -37,6 +40,36 @@ def create_flight_network(working_df):
         G.add_edge(origin_airport, destination_airport, 
                    distance=row.Distance,
                    date=row.Fly_date)
+    
+    return G
+
+def create_city_flight_network(working_df):
+    """
+    Input:
+    working_df: pd.DataFrame, the working dataframe
+    
+    Output:
+    G: nx.DiGraph, the flight network
+    
+    About:
+    This function creates a directed graph using the Class CustomDiGraph.
+    The nodes of the graph are the cities and the edges are the flights between the cities.
+    The graph has the following attributes:
+    - Edge attributes: distance
+    """
+    G = CustomDiGraph()
+    for row in tqdm.tqdm(working_df.itertuples(), total=len(working_df)):
+        # Get the origin and destination airports
+        origin_city = row.Origin_city
+        destination_city = row.Destination_city
+        
+        # Add origin and destination nodes with their city as attributes
+        G.add_node(origin_city)
+        G.add_node(destination_city)
+        
+        # Add an edge with distance and date
+        G.add_edge(origin_city, destination_city, 
+                   weight=row.Distance)
     
     return G
 

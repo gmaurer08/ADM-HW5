@@ -2,6 +2,21 @@
 
 This GitHub repository contains the implementation of the fifth homework for the course *Algorithmic Methods of Data Mining* for the Data Science master's degree at Sapienza (2024-2025). The details about the homework are specified here: [https://github.com/Sapienza-University-Rome/ADM/tree/master/2024/Homework_5](https://github.com/Sapienza-University-Rome/ADM/tree/master/2024/Homework_5)
 
+## File Structure
+
+```        
+Project       
+├── README.md
+├── .gitignore
+├── LICENSE         
+├── main.ipynb  
+├── modules                           
+    ├── graph.py          #CustomDiGraph Class and graph-related functions
+    ├── shortest_path.py  #Functions for shortest path finding
+    ├── utils.py          #Some utility functions  
+
+```
+
 ## Group #15 Team Members
 * Simone Mantero, mantero.2014057@studenti.uniroma1.it
 * Saif Ali, saif.dev03@gmail.com

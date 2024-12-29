@@ -8,6 +8,7 @@ from heapq import heappop, heappush  # Import heap functions for priority queue 
 from itertools import count  # Import count to generate unique sequence numbers
 import random
 from modules.shortest_path import deploy_dijkstra
+from folium.plugins import MarkerCluster
 
 # Custom DiGraph Class
 class CustomDiGraph:
@@ -314,8 +315,6 @@ def total_passenger_flow(df):
     return city_route_flow
 
 
-
-
 def degree_centrality(G):
     '''
     Function that calculates the degree centrality of a node based on the number of neighbors
@@ -495,3 +494,147 @@ def pagerank(G, node=None, a=0.5, seed=42, T=100000):
     Pagerank = {u: freq[u] / T for u in G.nodes}
 
     return Pagerank  # Return the full PageRank distribution
+
+
+def analyze_centrality(flight_network, airport):
+    '''
+    Function that computes betweenness, closeness, degree and pagerank centralities for a given airport in the flight_network
+    Inputs:
+    - flight_network (nx.DiGraph): graph of the flight network
+    - airport (str): name of the airport
+    Outputs:
+    - None
+    '''
+    # Display centrality results for the given airport
+    print(f"\n--- Centrality Measures for Airport: {airport} ---")
+    print(f"Betweenness Centrality: {betweenness_centrality(flight_network)[airport]:.4f}")
+    print(f"Closeness Centrality: {closeness_centrality(flight_network)[airport]:.4f}")
+    print(f"Degree Centrality: {degree_centrality(flight_network)[airport]:.4f}")
+    print(f"PageRank: {pagerank(flight_network)[airport]:.4f}")
+
+def compare_centralities(flight_network):
+    '''
+    Function that compares betweenness, closeness, degree and pagerank centralities for all airports in the flight_network
+    Inputs:
+    - flight_network (nx.DiGraph): graph of the flight network
+    Outputs:
+    - None
+    '''
+    # Compute centrality measures
+    betweenness = betweenness_centrality(flight_network)
+    closeness = closeness_centrality(flight_network)
+    degree_centr = degree_centrality(flight_network)
+    pagerank_centr = pagerank(flight_network)
+
+    # Plot histograms for centrality distributions
+    plt.figure(figsize=(12, 8))
+
+    plt.subplot(2, 2, 1)
+    plt.hist(betweenness.values(), bins=20, color='skyblue')
+    plt.title('Betweenness Centrality')
+
+    plt.subplot(2, 2, 2)
+    plt.hist(closeness.values(), bins=20, color='lightgreen')
+    plt.title('Closeness Centrality')
+
+    plt.subplot(2, 2, 3)
+    plt.hist(degree_centr.values(), bins=20, color='lightcoral')
+    plt.title('Degree Centrality')
+
+    plt.subplot(2, 2, 4)
+    plt.hist(pagerank_centr.values(), bins=20, color='lightskyblue')
+    plt.title('PageRank')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Identify top 5 nodes for each centrality measure
+    print("\n--- Top 5 Airports by Centrality Measures ---")
+    top_betweenness = sorted(betweenness.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_closeness = sorted(closeness.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_degree = sorted(degree_centr.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_pagerank = sorted(pagerank_centr.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    print("\nTop 5 by Betweenness Centrality:")
+    for airport, value in top_betweenness:
+        print(f"{airport}: {value:.4f}")
+
+    print("\nTop 5 by Closeness Centrality:")
+    for airport, value in top_closeness:
+        print(f"{airport}: {value:.4f}")
+
+    print("\nTop 5 by Degree Centrality:")
+    for airport, value in top_degree:
+        print(f"{airport}: {value:.4f}")
+
+    print("\nTop 5 by PageRank:")
+    for airport, value in top_pagerank:
+        print(f"{airport}: {value:.4f}")
+
+
+def eigenvector_centrality(flight_network, max_iter=1000, tol=1e-6):
+    '''
+    Function that computes eigenvector centrality of the flight_network
+    Inputs:
+        graph (nx.DiGraph or nx.Graph): input graph
+        max_iter (int): max number of iterations
+        tol (float): tolerance for convergence
+    Outputs:
+        dict: dictionary with nodes as keys and centrality scores as values
+    '''
+    # Convert the graph to an adjacency matrix
+    adj_matrix = nx.to_numpy_array(flight_network)
+    n = adj_matrix.shape[0]
+    
+    # Start with uniform centrality
+    centrality = np.ones(n)
+    centrality = centrality / np.linalg.norm(centrality)  # normalize 
+    
+    # Iterate until max_iter is reached
+    for _ in range(max_iter):
+        # update centrality
+        new_centrality = np.dot(adj_matrix, centrality)
+        # Normalize to prevent overflow or underflow
+        new_centrality = new_centrality / np.linalg.norm(new_centrality)
+        
+        # Stop if convergence is reached within a tolerance
+        if np.linalg.norm(new_centrality - centrality) < tol:
+            break
+        
+        # update centrality
+        centrality = new_centrality
+    
+    # map centrality values back to node labels
+    centrality_dict = {node: score for node, score in zip(flight_network.nodes, centrality)}
+    
+    return centrality_dict
+
+
+def analyze_eigenvector_centrality(flight_network):
+    '''
+    Function that analyzes the eigenvector centrality
+    Inputs:
+    - flight_network (nx.DiGraph): graph of the flight network
+    Outputs:
+    - None
+    '''
+    # Compute Eigenvector Centrality
+    try:
+        eigen_centrality = eigenvector_centrality(flight_network, max_iter=1000)
+    except nx.PowerIterationFailedConvergence:
+        print("Eigenvector centrality did not converge.")
+        return
+
+    # Display top 5 nodes by Eigenvector Centrality
+    top_eigenvector = sorted(eigen_centrality.items(), key=lambda x: x[1], reverse=True)[:5]
+    print("\n--- Top 5 Airports by Eigenvector Centrality ---")
+    for airport, value in top_eigenvector:
+        print(f"{airport}: {value:.4f}")
+
+    # Plot Eigenvector Centrality Distribution
+    plt.figure(figsize=(8, 6))
+    plt.hist(eigen_centrality.values(), bins=20, color='purple')
+    plt.title('Eigenvector Centrality Distribution')
+    plt.xlabel('Eigenvector Centrality')
+    plt.ylabel('Frequency')
+    plt.show()

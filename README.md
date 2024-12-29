@@ -10,7 +10,8 @@ Project
 ├── README.md
 ├── .gitignore
 ├── LICENSE         
-├── main.ipynb  
+├── main.ipynb            # main notebook
+├── map.html              # map of the flight network
 ├── modules                           
     ├── graph.py          #CustomDiGraph Class and graph-related functions
     ├── shortest_path.py  #Functions for shortest path finding

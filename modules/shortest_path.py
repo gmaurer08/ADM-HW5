@@ -1,12 +1,11 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import numpy as np 
-import seaborn as sns
 import pandas as pd
 import heapq
 import random
-
+#from modules.graph import CustomDiGraph
+from modules.utils import *
 
 def create_flight_network(working_df):
     """
@@ -40,6 +39,7 @@ def create_flight_network(working_df):
                    date=row.Fly_date)
     
     return G
+
 
 def deploy_dijkstra(flight_network, source):
     """

@@ -2,31 +2,29 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
-from collections import defaultdict
+from collections import Counter,defaultdict
 from IPython.display import display
 from heapq import heappop, heappush  # Import heap functions for priority queue operations
 from itertools import count  # Import count to generate unique sequence numbers
 import random
 from modules.shortest_path import deploy_dijkstra
-from folium.plugins import MarkerCluster
 
 # Custom DiGraph Class
 class CustomDiGraph:
     def __init__(self):
         '''Initialization of an empty graph'''
         self.nodes = set()  # set to store nodes
-        self.edges = defaultdict(set) # default dictionary to store edges: key=node, value=set of neighbors
+        self.edges = defaultdict(dict)  # default dictionary to store edges with weights: key=node, value=dict of neighbors and weights
 
     def add_node(self, node):
         '''Function to add a node to the graph'''
         self.nodes.add(node)
 
-    def add_edge(self, node1, node2):
-        '''Function that adds an outgoing edge from node1 to node2'''
-        # Add node1 and node2 to set of nodes in case they are not already in it
+    def add_edge(self, node1, node2, weight=1):
+        '''Function that adds an outgoing edge from node1 to node2 with a specified weight (default is 1)'''
         self.add_node(node1)
         self.add_node(node2)
-        self.edges[node1].add(node2) # add node2 to set of neighbors of node1
+        self.edges[node1][node2] = weight
 
     def remove_node(self, node):
         '''Function that removes a node and all edges connected to it'''
@@ -35,19 +33,16 @@ class CustomDiGraph:
             del self.edges[node]  # Remove the node from the edges dictionary
             # Remove any edges that point to this node
             for other_node in list(self.edges.keys()):
-                self.edges[other_node].discard(node)
+                if node in self.edges[other_node]:
+                    del self.edges[other_node][node]
 
     def remove_edge(self, node1, node2):
         '''Function that removes an edge from node1 to node2'''
-        self.edges[node1].discard(node2)
+        if node2 in self.edges[node1]:
+            del self.edges[node1][node2]
 
-    def remove_all_edges(self, node1, node2):
-        '''Function that removes any edge between node1 and node2'''
-        self.edges[node1].discard(node2)
-        self.edges[node2].discard(node1)
-    
     def get_neighbors(self, node):
-        '''Function that returns the neighbors of a node that can be reached'''
+        '''Function that returns the neighbors of a node with weights'''
         return self.edges[node]
 
     def get_nodes(self):
@@ -55,16 +50,16 @@ class CustomDiGraph:
         return list(self.nodes)
 
     def get_edges(self):
-        '''Function that returns a set of all edges as tuples (node1, node2)'''
+        '''Function that returns a set of all edges as tuples (node1, node2, weight)'''
         edge_set = set()
         for node1 in self.nodes:
-            for node2 in self.get_neighbors(node1):
-                edge_set.add((node1, node2))
+            for node2, weight in self.edges[node1].items():
+                edge_set.add((node1, node2, weight))
         return edge_set
-    
+
     def has_edge(self, node1, node2):
         '''Function that returns True if there is an edge between node1 and node2'''
-        return node2 in self.get_neighbors(node1)
+        return node2 in self.edges[node1]
 
     def out_degree(self, node):
         '''Returns the out-degree of a node (number of outgoing edges)'''
@@ -72,7 +67,7 @@ class CustomDiGraph:
             return len(self.edges[node])
         else:
             return 0
-    
+
     def in_degree(self, node):
         '''Returns the in-degree of a node (number of incoming edges)'''
         num_in_edges = 0
@@ -84,24 +79,25 @@ class CustomDiGraph:
     def __str__(self):
         '''Function that returns a string representation of the graph'''
         return f'Nodes: {self.nodes}\nEdges: {self.get_edges()}'
-    
+
     def to_networkx_digraph(self):
         '''Function that converts the custom graph to a NetworkX DiGraph'''
+        import networkx as nx
         G = nx.DiGraph()
         for node in self.nodes:
             G.add_node(node)
         for node1, neighbors in self.edges.items():
-            for node2 in neighbors:
-                G.add_edge(node1, node2)
+            for node2, weight in neighbors.items():
+                G.add_edge(node1, node2, weight=weight)
         return G
-    
+
     def num_nodes(self):
         '''Function that returns the number of nodes in the graph'''
         return len(self.nodes)
-    
+
     def num_edges(self):
         '''Function that returns the number of edges in the graph'''
-        return len(self.get_edges())
+        return sum(len(neighbors) for neighbors in self.edges.values())
 
 
 
@@ -638,3 +634,159 @@ def analyze_eigenvector_centrality(flight_network):
     plt.xlabel('Eigenvector Centrality')
     plt.ylabel('Frequency')
     plt.show()
+
+
+
+def _custom_louvain_algorithm(network):
+    """
+    Custom implementation of the Louvain algorithm for community detection.
+    Adapted to work with the CustomDiGraph class.
+    """
+    #Total weight of edges
+    total_weight = sum(weight for _, _, weight in network.get_edges())
+    # Initialize communities: each node starts in its own community
+    communities = {node: {node} for node in network.get_nodes()}
+    node_to_community = {node: node for node in network.get_nodes()}  # Track the community of each node
+    def move_node(node):
+        """
+        Move a node to the community where it gains the most modularity.
+        """
+        current_community = node_to_community[node]
+        # Count the weighted edges connecting the node to each community
+        community_weights = Counter()
+        for neighbor, weight in network.get_neighbors(node).items():
+            neighbor_community = node_to_community[neighbor]
+            community_weights[neighbor_community] += weight
+        #Evaluate modularity gain for moving the node to neighboring communities
+        best_gain = 0
+        best_community = current_community
+        for target_community, edge_weight in community_weights.items():
+            if target_community != current_community:
+                total_degree = sum(
+                    sum(network.get_neighbors(u).values())
+                    for u in communities[target_community]
+                )
+                current_degree = sum(network.get_neighbors(node).values())
+                gain = (edge_weight / total_weight- (current_degree * total_degree) / (2 * total_weight ** 2) )
+                if gain > best_gain:
+                    best_gain = gain
+                    best_community = target_community
+        # Move the node to the best community if there's a positive gain
+        if best_community != current_community:
+            communities[current_community].remove(node)
+            communities[best_community].add(node)
+            node_to_community[node] = best_community
+    # Iteratively refine communities
+    for _ in range(10):
+        for node in network.get_nodes():
+            move_node(node)
+    # Aggregate nodes into final communities
+    aggregated_communities = defaultdict(set)
+    for node, community in node_to_community.items():
+        aggregated_communities[community].add(node)
+    #Number community keys
+    final_communities = {i: nodes for i, nodes in enumerate(aggregated_communities.values())}
+    return final_communities
+
+
+# Visualize the differences after community detection
+def _visualize_community_graph(graph, communities):
+    nx_graph=graph.to_networkx_digraph()
+    pos = nx.spring_layout(nx_graph)
+    #Original graph
+    plt.figure(figsize=(15, 8))
+    plt.subplot(1, 3, 1)
+    nx.draw(
+        nx_graph, pos, with_labels=True, node_color="lightblue", edge_color="black",
+        node_size=800, font_size=10, font_color="black"
+    )
+    plt.title("Original Flight Network")
+    # Partitioned graph
+    plt.subplot(1, 3, 2)
+    # Assign a unique random color to each community
+    community_colors = {community_id: "#%06x" % random.randint(0, 0xFFFFFF) for community_id in communities}
+    node_colors = [community_colors[community_id] for node in nx_graph.nodes() for community_id, nodes in communities.items() if node in nodes]
+    nx.draw(
+        nx_graph, pos, with_labels=True, node_color=node_colors, edge_color="black",
+        node_size=800, font_size=10, font_color="black"
+    )
+    plt.title("Flight Network with Communities")
+    # Legend
+    plt.subplot(1, 3, 3)
+    plt.axis('off')
+    legend_handles = [
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color, markersize=10, label=f"Community {community_id}")
+        for community_id, color in community_colors.items()
+    ]
+    plt.legend(handles=legend_handles, loc='center', title="Communities")
+    plt.tight_layout()
+    plt.show()
+
+def analyze_flight_network(network, c1, c2):
+    """
+    Analyze the flight network, identify communities, visualize identified communities and check whether c1 and c2 belong to the same community.
+    Args:
+        network (CustomDiGraph): The flight network graph.
+        c1 (str): Name of the first city.
+        c2 (str): Name of the second city.
+    """
+
+    # Identify communities using the custom Louvain algorithm
+    communities = _custom_louvain_algorithm(network)
+    #Check if city1 and city2 belong to the same community
+    city1_community, city2_community = None, None
+
+    for community_id, nodes in communities.items():
+        if c1 in nodes:
+            city1_community = community_id
+        if c2 in nodes:
+            city2_community = community_id
+
+    same_community = city1_community == city2_community
+
+    #Print results
+    print(f"The flight network has been partitioned in {len(communities)} communities.")
+
+    community_list = []
+    for key, values in communities.items():
+        community_list.append({"Community Number": key, "Number of cities": len(values), "Cities": ", ".join(values)})
+    community_df = pd.DataFrame(community_list)
+    display(community_df.style.hide(axis='index'))
+
+    _visualize_community_graph(network, communities)
+    print(f"Are {c1} and {c2} in the same community?", same_community)
+
+def label_propagation(network, max_iterations=10):
+    #Each city as its own coomunity
+    labels = {node: node for node in network.get_nodes()}
+
+    for _ in range(max_iterations):
+        #Shuffle nodes to ensure random processing order
+        nodes = list(network.get_nodes())
+        random.shuffle(nodes)
+        
+        has_changed = False
+        
+        for node in nodes:
+            #Count labels of neighbors
+            neighbor_labels = [labels[neighbor] for neighbor in network.get_neighbors(node)]
+            if neighbor_labels:
+                most_common_label = Counter(neighbor_labels).most_common(1)[0][0]
+                
+                #Update label if it differs from the current label
+                if labels[node] != most_common_label:
+                    labels[node] = most_common_label
+                    has_changed = True
+        
+        #Stop if no labels have changed
+        if not has_changed:
+            break
+
+    #Aggregate nodes into communities
+    communities = defaultdict(set)
+    for node, label in labels.items():
+        communities[label].add(node)
+
+    #Number communities
+    final_communities = {i: nodes for i, nodes in enumerate(communities.values())}
+    return final_communities

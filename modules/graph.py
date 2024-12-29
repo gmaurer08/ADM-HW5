@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from collections import defaultdict
 from IPython.display import display
+from heapq import heappop, heappush  # Import heap functions for priority queue operations
+from itertools import count  # Import count to generate unique sequence numbers
+import random
+from shortest_path import deploy_dijkstra
 
 # Custom DiGraph Class
 class CustomDiGraph:
@@ -308,3 +312,186 @@ def total_passenger_flow(df):
             city_route_flow[(origin, destination)] += min(df['Passengers'].iloc[idx], df['Seats'].iloc[idx])
     
     return city_route_flow
+
+
+
+
+def degree_centrality(G):
+    '''
+    Function that calculates the degree centrality of a node based on the number of neighbors
+    Inputs:
+    - G (nx.DiGraph): graph of the flight network
+    Outputs:
+    - dict: dictionary of degree centralities
+    '''
+    degree_centralities = {node: G.degree(node) / (G.number_of_nodes()-1) for node in G.nodes}
+    return degree_centralities
+
+def closeness_centrality(G):
+    '''
+    Function that calculates the closeness centrality of a node
+    Inputs:
+    - G (nx.DiGraph): graph of the flight network
+    Outputs:
+    - dict: dictionary of closeness centralities
+    '''
+    # Initialize dictionary of closeness centralities
+    closeness_centralities = defaultdict()
+
+    for node in G.nodes:
+        # Compute distances from the source node
+        distances, _ = deploy_dijkstra(G, node)
+        
+        # Filter reachable nodes
+        reachable = [dist for dist in distances.values() if dist < float('inf')]
+        
+        # If only the node itself is reachable, centrality is 0
+        if len(reachable) <= 1:
+            closeness_centralities[node] = 0.0
+        
+        # Compute the total shortest path distances
+        totsp = sum(reachable)
+        
+        # Normalize by the size of the reachable component
+        reachable_count = len(reachable)
+        normalization = (reachable_count-1) / (G.number_of_nodes()-1)
+    
+        # Closeness centrality formula
+        closeness_centralities[node] = (reachable_count-1) / totsp * normalization if totsp!=0 else 0.0
+
+    return closeness_centralities
+
+def betweenness_centrality(G):
+    '''
+    Calculate the betweenness centrality for a directed, weighted G.
+
+    Parameters:
+        G (dict): A directed, weighted G represented as an adjacency list.
+
+    Returns:
+        dict: A dictionary with nodes as keys and their betweenness centrality as values.
+    '''
+
+    # Initialize betweenness centrality for each node to 0.0
+    centrality = dict.fromkeys(G, 0.0)
+    all_nodes = G  # Extract all nodes from the G
+
+    # Iterate over all nodes in the G to calculate their contributions to centrality
+    for start_node in all_nodes:
+
+        # Dijkstra's algorithm setup
+        visited_stack = []  # Stack to keep track of the nodes visited in order
+        predecessors = {}  # Dictionary to store predecessors of each node
+        for node in G:
+            predecessors[node] = []
+
+        path_count = dict.fromkeys(G, 0.0)  # Initialize path counts for each node
+        shortest_distances = {}  # Dictionary to store shortest distances from the start node
+        path_count[start_node] = 1.0  # There's one path to the start node itself
+
+        # Priority queue for nodes to be explored; stores (distance, unique ID, predecessor, current node)
+        push = heappush
+        pop = heappop
+        seen_distances = {start_node: 0}  # Dictionary to track the minimum distance seen for each node
+        node_counter = count()  # Unique sequence numbers for heap operations
+        priority_queue = []
+        push(priority_queue, (0, next(node_counter), start_node, start_node))
+
+        # Process the priority queue until empty
+        while priority_queue:
+            (current_distance, _, from_node, current_node) = pop(priority_queue)
+
+            # Skip processing if the node is already finalized
+            if current_node in shortest_distances:
+                continue
+
+            # Update the number of shortest paths to the current node
+            path_count[current_node] += path_count[from_node]
+            visited_stack.append(current_node)  # Add the current node to the stack
+
+            # Finalize the shortest distance to the current node
+            shortest_distances[current_node] = current_distance
+
+            # Explore neighbors of the current node
+            for neighbor, _ in G[current_node].items():
+                distance_to_neighbor = current_distance + G.edges[current_node, neighbor]['distance']
+
+                # If a shorter path to the neighbor is found, update the priority queue and path counts
+                if neighbor not in shortest_distances and (neighbor not in seen_distances or distance_to_neighbor < seen_distances[neighbor]):
+                    seen_distances[neighbor] = distance_to_neighbor
+                    push(priority_queue, (distance_to_neighbor, next(node_counter), current_node, neighbor))
+                    path_count[neighbor] = 0.0
+                    predecessors[neighbor] = [current_node]
+
+                # If another shortest path to the neighbor is found, update path counts and predecessors
+                elif distance_to_neighbor == seen_distances[neighbor]:
+                    path_count[neighbor] += path_count[current_node]
+                    predecessors[neighbor].append(current_node)
+
+        # Accumulate dependencies for betweenness centrality
+        dependencies = dict.fromkeys(visited_stack, 0)  # Initialize dependency for each node in the stack
+        while visited_stack:
+            current_node = visited_stack.pop()  # Pop nodes in reverse order of finishing times
+            coefficient = (1 + dependencies[current_node]) / path_count[current_node]
+            for from_node in predecessors[current_node]:
+                dependencies[from_node] += path_count[from_node] * coefficient
+
+            # Accumulate betweenness centrality for nodes other than the start node
+            if current_node != start_node:
+                centrality[current_node] += dependencies[current_node]
+
+    # Normalize the betweenness centrality values
+    total_nodes = len(G)  # Total number of nodes in the G
+    if total_nodes <= 2:
+        scale_factor = None  # No normalization if there are less than 3 nodes
+    else:
+        scale_factor = 1 / ((total_nodes - 1) * (total_nodes - 2))
+
+    if scale_factor is not None:
+        for node in centrality:
+            centrality[node] *= scale_factor
+
+    return centrality
+
+def pagerank(G, node=None, a=0.5, seed=42, T=100000):
+    '''
+    Function that calculates the betweenness centrality of a node
+    Inputs:
+    - G (nx.DiGraph): graph of the flight network
+    - node (str): starting node
+    - a (int): parameter in [0,1]
+    - seed (int): random seed
+    - T (int): nuber of steps
+    Outputs:
+    - int: betweenness centrality of the node
+    '''
+    if seed is not None:
+        random.seed(seed)  # Set random seed for reproducibility
+
+    t = 1
+    if node is not None:
+        current = random.choice(list(G.nodes)) # starting node
+    else:
+        current = node  # Starting node
+    freq = defaultdict(int)  # initialize frequency counts
+
+    # Random walk through the graph
+    while t <= T:
+        coin_flip = random.choices([0, 1], weights=[1 - a, a], k=1)[0]  # flip a coin
+
+        if coin_flip == 0:  # follow a random out-neighbor
+            successors = list(G.successors(current))
+            if successors:  # Avoid errors in case the node has no successor
+                current = random.choice(successors)
+            else:  # If there are no out-neighbors, teleport
+                current = random.choice(list(G.nodes))
+        else:  # teleport to a random node
+            current = random.choice(list(G.nodes))
+
+        freq[current] += 1
+        t += 1
+
+    # Normalize frequencies to compute PageRank
+    Pagerank = {u: freq[u] / T for u in G.nodes}
+
+    return Pagerank  # Return the full PageRank distribution

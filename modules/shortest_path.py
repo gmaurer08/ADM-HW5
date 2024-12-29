@@ -25,7 +25,7 @@ def create_flight_network(working_df):
     """
     G = nx.DiGraph()
 
-    for row in tqdm.tqdm(working_df.itertuples(), total=len(working_df)):
+    for row in tqdm(working_df.itertuples(), total=len(working_df)):
         # Get the origin and destination airports
         origin_airport = row.Origin_airport
         destination_airport = row.Destination_airport

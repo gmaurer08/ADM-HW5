@@ -7,7 +7,7 @@ from IPython.display import display
 from heapq import heappop, heappush  # Import heap functions for priority queue operations
 from itertools import count  # Import count to generate unique sequence numbers
 import random
-from shortest_path import deploy_dijkstra
+from modules.shortest_path import deploy_dijkstra
 
 # Custom DiGraph Class
 class CustomDiGraph:
